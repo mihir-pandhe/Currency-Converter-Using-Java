@@ -1,7 +1,11 @@
 import javax.swing.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.util.HashMap;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import org.json.JSONObject;
 
 public class CurrencyConverter extends JFrame {
     private JComboBox<String> fromCurrency;
@@ -9,8 +13,6 @@ public class CurrencyConverter extends JFrame {
     private JTextField amountField;
     private JLabel resultLabel;
     private JButton convertButton;
-
-    private HashMap<String, Double> conversionRates;
 
     public CurrencyConverter() {
         setTitle("Currency Converter");
@@ -23,23 +25,21 @@ public class CurrencyConverter extends JFrame {
         resultLabel = new JLabel("Converted amount: ");
         convertButton = new JButton("Convert");
 
-        conversionRates = new HashMap<>();
-        conversionRates.put("USDEUR", 0.92);
-        conversionRates.put("USDGBP", 0.75);
-        conversionRates.put("EURUSD", 1.18);
-        conversionRates.put("EURGBP", 0.88);
-        conversionRates.put("GBPUSD", 1.33);
-        conversionRates.put("GBPEUR", 1.14);
-
         convertButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                String from = fromCurrency.getSelectedItem().toString();
-                String to = toCurrency.getSelectedItem().toString();
-                double amount = Double.parseDouble(amountField.getText());
-                double rate = conversionRates.getOrDefault(from + to, 1.0);
-                double convertedAmount = amount * rate;
-                resultLabel.setText("Converted amount: " + convertedAmount);
+                try {
+                    String from = fromCurrency.getSelectedItem().toString();
+                    String to = toCurrency.getSelectedItem().toString();
+                    double amount = Double.parseDouble(amountField.getText());
+                    double rate = fetchConversionRate(from, to);
+                    double convertedAmount = amount * rate;
+                    resultLabel.setText("Converted amount: " + String.format("%.2f", convertedAmount));
+                } catch (NumberFormatException ex) {
+                    JOptionPane.showMessageDialog(null, "Please enter a valid number.");
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(null, "Error: " + ex.getMessage());
+                }
             }
         });
 
@@ -56,7 +56,30 @@ public class CurrencyConverter extends JFrame {
         setVisible(true);
     }
 
+    private double fetchConversionRate(String from, String to) throws Exception {
+        String urlStr = "https://api.exchangerate-api.com/v4/latest/" + from;
+        URL url = new URL(urlStr);
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("GET");
+
+        BufferedReader in = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+        String inputLine;
+        StringBuilder content = new StringBuilder();
+        while ((inputLine = in.readLine()) != null) {
+            content.append(inputLine);
+        }
+        in.close();
+        conn.disconnect();
+
+        JSONObject json = new JSONObject(content.toString());
+        JSONObject rates = json.getJSONObject("rates");
+        if (!rates.has(to)) {
+            throw new Exception("Currency not available.");
+        }
+        return rates.getDouble(to);
+    }
+
     public static void main(String[] args) {
-        new CurrencyConverter();
+        SwingUtilities.invokeLater(() -> new CurrencyConverter());
     }
 }
